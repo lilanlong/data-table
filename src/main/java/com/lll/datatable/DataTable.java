@@ -26,6 +26,7 @@ public class DataTable implements AutoCloseable {
     private List<String> columnNameList;
     private static final Db db;
     private static final String TABLE_PREFIX = "LLL";
+    private static final String PRIMARY_KEY = "lll_id";
 
     static {
         DruidDataSource dataSource = new DruidDataSource();
@@ -52,15 +53,20 @@ public class DataTable implements AutoCloseable {
                 subInsertIntoColumnSqlSb.append(columnName).append(",");
                 subInsertIntoPlaceholderSqlSb.append("?").append(",");
             }
-            db.execute("CREATE TABLE " + tableName + " (" + StrUtil.removeSuffix(StrUtil.trim(subCreateTableColumnSqlSb.toString()), ",") + ")");
-            String subInsertIntoColumnSql = StrUtil.removeSuffix(subInsertIntoColumnSqlSb.toString(), ",");
-            String subInsertIntoPlaceholderSql = StrUtil.removeSuffix(subInsertIntoPlaceholderSqlSb.toString(), ",");
-            for (JSONObject jsonObj : dataTable) {
-                Object[] args = new Object[columnNameList.size()];
+            subCreateTableColumnSqlSb.append(PRIMARY_KEY + " int, primary key (" + PRIMARY_KEY + ")");
+            subInsertIntoColumnSqlSb.append(PRIMARY_KEY);
+            subInsertIntoPlaceholderSqlSb.append("?");
+            db.execute("CREATE TABLE " + tableName + " (" + subCreateTableColumnSqlSb + ")");
+            String subInsertIntoColumnSql = subInsertIntoColumnSqlSb.toString();
+            String subInsertIntoPlaceholderSql = subInsertIntoPlaceholderSqlSb.toString();
+            for (int j = 0; j < dataTable.size(); j++) {
+                JSONObject jsonObj = dataTable.get(j);
+                Object[] args = new Object[columnNameList.size() + 1];
                 for (int i = 0; i < columnNameList.size(); i++) {
                     String columnName = columnNameList.get(i);
                     args[i] = jsonObj.get(columnName);
                 }
+                args[columnNameList.size()] = j;
                 db.execute("INSERT INTO " + tableName + "(" + subInsertIntoColumnSql + ") VALUES(" + subInsertIntoPlaceholderSql + ")", args);
             }
         }
@@ -71,15 +77,11 @@ public class DataTable implements AutoCloseable {
             return dataTable;
         }
         List<JSONObject> dataTable = new ArrayList<>();
-        String sql = "SELECT * FROM " + tableName + " WHERE " + subFilterSql;
+        String sql = "SELECT " + PRIMARY_KEY + " FROM " + tableName + " WHERE " + subFilterSql;
         List<Entity> dataList = db.query(sql);
         if (CollectionUtil.isNotEmpty(dataList)) {
             dataList.forEach(dl -> {
-                JSONObject object = new JSONObject();
-                for (String columnName : columnNameList) {
-                    object.put(columnName, dl.get(columnName.toUpperCase()));
-                }
-                dataTable.add(object);
+                dataTable.add(this.dataTable.get(dl.getInt(PRIMARY_KEY)));
             });
         }
         return dataTable;
